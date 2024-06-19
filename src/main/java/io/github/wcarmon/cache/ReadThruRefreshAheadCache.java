@@ -3,6 +3,7 @@ package io.github.wcarmon.cache;
 import static java.util.Objects.requireNonNull;
 import static java.util.Objects.requireNonNullElse;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
@@ -14,7 +15,8 @@ import lombok.Builder;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A Read-Through, Refresh-Ahead cache
+ * A Read-Through, Refresh-Ahead cache.
+ * Thread-safe, Asynchronous refresh.
  *
  * @param <K> cache key type (like a key in java.util.Map)
  * @param <V> cache value type (like a value in java.util.Map)
@@ -127,8 +129,16 @@ public final class ReadThruRefreshAheadCache<K, V> {
         requireNonNull(key, "key is required and null.");
         requireNonNull(value, "value is required and null.");
 
-
         cache.put(key, value);
+    }
+
+    /**
+     * TODO
+     *
+     * @param m TODO
+     */
+    public void putAll(Map<? extends K, ? extends V> m) {
+        cache.putAll(m);
     }
 
     /**
