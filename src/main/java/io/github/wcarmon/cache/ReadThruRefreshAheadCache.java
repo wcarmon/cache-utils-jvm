@@ -32,18 +32,20 @@ public final class ReadThruRefreshAheadCache<K, V> {
     private final Consumer<? super K> onBeforeRefresh;
     private final Consumer<? super K> onCacheHit;
     private final Consumer<? super K> onCacheMiss;
+    private final Runnable onAfterChange;
     private final Function<? super K, ? extends V> valueLoader;
 
     // TODO: delombok
     @Builder
-    public ReadThruRefreshAheadCache(
+    private ReadThruRefreshAheadCache(
             int capacity,
             Function<K, V> valueLoader,
             ExecutorService executorService,
             @Nullable Consumer<K> onBeforeRefresh,
+            @Nullable BiConsumer<K, V> onAfterRefresh,
             @Nullable Consumer<K> onCacheHit,
             @Nullable Consumer<K> onCacheMiss,
-            @Nullable BiConsumer<K, V> onAfterRefresh) {
+            @Nullable Runnable onAfterChange) {
 
         requireNonNull(executorService, "executorService is required and null.");
         requireNonNull(valueLoader, "valueLoader is required and null.");
@@ -59,6 +61,13 @@ public final class ReadThruRefreshAheadCache<K, V> {
             };
         } else {
             this.onAfterRefresh = onAfterRefresh;
+        }
+
+        if (onAfterChange == null) {
+            this.onAfterChange = () -> {
+            };
+        } else {
+            this.onAfterChange = onAfterChange;
         }
 
         cache = new ConcurrentHashMap<>(capacity);
