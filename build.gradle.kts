@@ -24,9 +24,8 @@ group = mvnGroupId
 version = mvnVersion
 
 configure<JavaPluginExtension> {
-    // TODO: 17?
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 tasks {
@@ -37,7 +36,15 @@ tasks {
 }
 
 dependencies {
+    // TODO: remove lombok
+    annotationProcessor("org.projectlombok:lombok:1.18.30")
+    compileOnly("org.projectlombok:lombok:1.18.30")
+
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.30")
+    testCompileOnly("org.projectlombok:lombok:1.18.30")
+
     implementation("org.jetbrains:annotations:24.1.0")
+    implementation("org.ehcache:ehcache:3.10.8")
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:5.10.1")

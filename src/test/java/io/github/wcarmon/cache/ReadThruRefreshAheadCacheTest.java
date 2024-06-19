@@ -1,7 +1,5 @@
 package io.github.wcarmon.cache;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 class ReadThruRefreshAheadCacheTest {
 
     // TODO: value absent + !bypassCache
@@ -12,7 +10,11 @@ class ReadThruRefreshAheadCacheTest {
 
     // TODO: value present + bypassCache
 
-    // TODO: onCacheHit
+    // TODO: test BiConsumer<? super K, ? super V> onAfterRefresh
 
-    // TODO: onCacheMiss
+    // TODO: test Consumer<? super K> onBeforeRefresh
+
+    // TODO: test Consumer<? super K> onCacheHit
+
+    // TODO: test Consumer<? super K> onCacheMiss
 }
