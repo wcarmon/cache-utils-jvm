@@ -32,12 +32,15 @@ public final class ReadThruRefreshAheadCache<K, V> {
      * Executes background tasks like refreshing entries.
      */
     private final ExecutorService executorService;
+
     /** Executes after a successful refresh. */
     private final BiConsumer<? super K, ? super V> onAfterBackgroundRefresh;
+
     /**
      * Executes after any insert, update, or remove.
      */
     private final Runnable onAfterChange;
+
     /** Executes before an entry refresh. */
     private final Consumer<? super K> onBeforeRefresh;
 
@@ -142,9 +145,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
         requireNonBlankKey(key);
 
         V valueInCache = cache.get(key);
-
         if (valueInCache == null) {
             onCacheMiss.accept(key);
+        } else {
+            onCacheHit.accept(key);
         }
 
         if (bypassCache || valueInCache == null) {
@@ -157,9 +161,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
             return value;
         }
 
-        // TODO: queue background refresh here
-
-        onCacheHit.accept(key);
+        refreshLater(key);
         return valueInCache;
     }
 
@@ -206,10 +208,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     /**
-     * TODO
+     * Removes entry (when present)
      *
-     * @param key
-     * @return TODO
+     * @param key - key whose cache entry will be removed
+     * @return previous value associated with key, or null if absent
      */
     @Nullable
     public V remove(K key) {
@@ -219,11 +221,40 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     /**
-     * TODO
+     * Count stored entries
      *
-     * @return TODO
+     * @return snapshot of the cache entry count
      */
     public int size() {
         return cache.size();
+    }
+
+    private void refreshLater(K key) {
+        requireNonBlankKey(key);
+
+        executorService.submit(() -> refreshNow(key));
+    }
+
+    private void refreshNow(K key) {
+        onBeforeRefresh.accept(key);
+
+        final V value;
+        try {
+            value = valueLoader.apply(key);
+
+        } catch (Exception ex) {
+            onRefreshFailure.accept(key, ex);
+            return;
+        }
+
+        if (value == null) {
+            // -- No state change for null value
+            return;
+        }
+
+        cache.put(key, value);
+        onAfterChange.run();
+
+        onAfterBackgroundRefresh.accept(key, value);
     }
 }
