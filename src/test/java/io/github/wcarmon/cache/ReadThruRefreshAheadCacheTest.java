@@ -14,6 +14,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -87,27 +89,51 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     @Test
-    void testValueInCache_bypassCache_valueLoaderReturnsNonNull() {
+    @Timeout(value = 3, unit = SECONDS)
+    void testValueInCache_bypassCache_valueLoaderReturnsNonNull() throws Exception {
         // -- Arrange
         final String k = "theKey";
+
+        when(mockValueLoader.apply(eq(k)))
+                .thenReturn(9);
+
+        subject.put(k, 2);
 
         // -- Act
         final Integer got = subject.get(k, true);
 
         // -- Assert: output
-        // TODO
+        assertEquals(9, got);
 
         // -- Assert: callbacks
-        // TODO
+        final VerificationMode vMode = timeout(1000L).times(1);
+        verify(mockOnAfterChange, vMode).run();
+        verify(mockOnCacheHit, vMode).accept(eq(k));
+        verify(mockValueLoader, vMode).apply(eq(k));
+
+        verifyNoInteractions(mockOnAfterBackgroundRefresh);
+        verifyNoInteractions(mockOnBeforeRefresh);
+        verifyNoInteractions(mockOnCacheMiss);
+        verifyNoInteractions(mockOnRefreshFailure);
+
 
         // -- Assert: state
-        // TODO
+        assertTrue(subject.containsKey(k));
+
+        final Field cacheField = ReadThruRefreshAheadCache.class.getDeclaredField("cache");
+        cacheField.setAccessible(true);
+        final var cacheMap = (Map<String, Integer>) cacheField.get(subject);
+        assertEquals(9, cacheMap.get(k));
     }
 
     @Test
+    @Timeout(value = 3, unit = SECONDS)
     void testValueInCache_bypassCache_valueLoaderReturnsNull() {
         // -- Arrange
         final String k = "theKey";
+
+        when(mockValueLoader.apply(eq(k)))
+                .thenReturn(null);
 
         // -- Act
         final Integer got = subject.get(k, true);
@@ -161,6 +187,7 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     @Test
+    @Timeout(value = 3, unit = SECONDS)
     void testValueInCache_valueLoaderReturnsNull() {
 
         // -- Arrange
@@ -191,10 +218,15 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     @Test
+    @Timeout(value = 3, unit = SECONDS)
     void testValueNotInCache_bypassCache_valueLoaderReturnsNonNull() {
         // -- Arrange
         final String k = "theKey";
 
+        when(mockValueLoader.apply(eq(k)))
+                .thenReturn(6);
+
+
         // -- Act
         final Integer got = subject.get(k, true);
 
@@ -209,10 +241,14 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     @Test
+    @Timeout(value = 3, unit = SECONDS)
     void testValueNotInCache_bypassCache_valueLoaderReturnsNull() {
         // -- Arrange
         final String k = "theKey";
 
+        when(mockValueLoader.apply(eq(k)))
+                .thenReturn(null);
+
         // -- Act
         final Integer got = subject.get(k, true);
 
@@ -227,6 +263,7 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     @Test
+    @Timeout(value = 3, unit = SECONDS)
     void testValueNotInCache_valueLoaderReturnsNonNull() {
         // -- Arrange
         final String k = "theKey";
@@ -263,6 +300,7 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     @Test
+    @Timeout(value = 3, unit = SECONDS)
     void testValueNotInCache_valueLoaderReturnsNull() {
 
         // -- Arrange
@@ -295,8 +333,6 @@ class ReadThruRefreshAheadCacheTest {
         assertFalse(subject.containsKey(k));
         assertTrue(subject.isEmpty());
     }
-
-    // TODO: get (bypass)
 
     // TODO: BiConsumer<? super K, ? super V> onAfterRefresh
 
