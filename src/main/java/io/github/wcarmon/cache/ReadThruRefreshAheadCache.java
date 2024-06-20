@@ -12,7 +12,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import lombok.Builder;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -52,8 +51,6 @@ public final class ReadThruRefreshAheadCache<K, V> {
     /** Given a key, retrieves a value from a slower data store */
     private final Function<? super K, ? extends V> valueLoader;
 
-    // TODO: delombok
-    @Builder
     private ReadThruRefreshAheadCache(
             int capacity,
             Function<K, V> valueLoader,
@@ -85,6 +82,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
         }
 
         cache = new ConcurrentHashMap<>(capacity);
+    }
+
+    public static <K, V> ReadThruRefreshAheadCacheBuilder<K, V> builder() {
+        return new ReadThruRefreshAheadCacheBuilder<K, V>();
     }
 
     private static void requireNonBlankKey(Object key) {
@@ -272,6 +273,75 @@ public final class ReadThruRefreshAheadCache<K, V> {
             }
 
             onAfterChange.run();
+        }
+    }
+
+    public static class ReadThruRefreshAheadCacheBuilder<K, V> {
+
+        private int capacity;
+        private ExecutorService executorService;
+        private @Nullable Runnable onAfterChange;
+        private @Nullable Consumer<K> onBeforeRefresh;
+        private @Nullable Consumer<K> onCacheHit;
+        private @Nullable Consumer<K> onCacheMiss;
+        private @Nullable BiConsumer<K, Exception> onValueLoadException;
+        private boolean removeEntryWhenValueLoaderReturnsNull;
+        private Function<K, V> valueLoader;
+
+        ReadThruRefreshAheadCacheBuilder() {
+        }
+
+        public ReadThruRefreshAheadCache<K, V> build() {
+            return new ReadThruRefreshAheadCache<K, V>(this.capacity, this.valueLoader, this.executorService, this.removeEntryWhenValueLoaderReturnsNull, this.onValueLoadException, this.onBeforeRefresh, this.onCacheHit, this.onCacheMiss, this.onAfterChange);
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> capacity(int capacity) {
+            this.capacity = capacity;
+            return this;
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> executorService(ExecutorService executorService) {
+            this.executorService = executorService;
+            return this;
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> onAfterChange(@Nullable Runnable onAfterChange) {
+            this.onAfterChange = onAfterChange;
+            return this;
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> onBeforeRefresh(@Nullable Consumer<K> onBeforeRefresh) {
+            this.onBeforeRefresh = onBeforeRefresh;
+            return this;
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> onCacheHit(@Nullable Consumer<K> onCacheHit) {
+            this.onCacheHit = onCacheHit;
+            return this;
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> onCacheMiss(@Nullable Consumer<K> onCacheMiss) {
+            this.onCacheMiss = onCacheMiss;
+            return this;
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> onValueLoadException(@Nullable BiConsumer<K, Exception> onValueLoadException) {
+            this.onValueLoadException = onValueLoadException;
+            return this;
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> removeEntryWhenValueLoaderReturnsNull(boolean removeEntryWhenValueLoaderReturnsNull) {
+            this.removeEntryWhenValueLoaderReturnsNull = removeEntryWhenValueLoaderReturnsNull;
+            return this;
+        }
+
+        public String toString() {
+            return "ReadThruRefreshAheadCache.ReadThruRefreshAheadCacheBuilder(capacity=" + this.capacity + ", valueLoader=" + this.valueLoader + ", executorService=" + this.executorService + ", removeEntryWhenValueLoaderReturnsNull=" + this.removeEntryWhenValueLoaderReturnsNull + ", onValueLoadException=" + this.onValueLoadException + ", onBeforeRefresh=" + this.onBeforeRefresh + ", onCacheHit=" + this.onCacheHit + ", onCacheMiss=" + this.onCacheMiss + ", onAfterChange=" + this.onAfterChange + ")";
+        }
+
+        public ReadThruRefreshAheadCacheBuilder<K, V> valueLoader(Function<K, V> valueLoader) {
+            this.valueLoader = valueLoader;
+            return this;
         }
     }
 }

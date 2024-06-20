@@ -36,10 +36,8 @@ tasks {
 }
 
 dependencies {
-
-    // TODO: remove lombok
-    annotationProcessor("org.projectlombok:lombok:1.18.30")
-    compileOnly("org.projectlombok:lombok:1.18.30")
+    // annotationProcessor("org.projectlombok:lombok:1.18.30")
+    // compileOnly("org.projectlombok:lombok:1.18.30")
 
     implementation("org.jetbrains:annotations:24.1.0")
 
