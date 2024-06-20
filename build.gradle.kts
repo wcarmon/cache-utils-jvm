@@ -43,9 +43,7 @@ dependencies {
 
     implementation("org.jetbrains:annotations:24.1.0")
 
-    //testImplementation("com.google.guava:guava:33.2.1-jre")
-    //testImplementation("org.apache.commons:commons-lang3:3.14.0")
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.mockito:mockito-core:5.12.0")
 }
 

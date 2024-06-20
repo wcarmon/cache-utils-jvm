@@ -4,6 +4,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.Objects.requireNonNullElse;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
@@ -28,17 +29,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
 
     private final ConcurrentMap<K, V> cache;
 
-    /**
-     * Executes background tasks like refreshing entries.
-     */
+    /** Executes background tasks like refreshing entries. */
     private final ExecutorService executorService;
 
-    /** Executes after a successful refresh. */
-    private final BiConsumer<? super K, ? super V> onAfterBackgroundRefresh;
-
-    /**
-     * Executes after any insert, update, or remove.
-     */
+    /** Executes after any insert, update, or remove. */
     private final Runnable onAfterChange;
 
     /** Executes before an entry refresh. */
@@ -50,8 +44,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
     /** Executes after this::get fails to find a matching entry in in this::cache */
     private final Consumer<? super K> onCacheMiss;
 
-    /** Executes after failing to refresh an entry */
-    private final BiConsumer<K, Exception> onRefreshFailure;
+    /** Executes after failing to load value from valueLoader */
+    private final BiConsumer<K, Exception> onValueLoadException;
+
+    private final boolean removeEntryWhenValueLoaderReturnsNull;
 
     /** Given a key, retrieves a value from a slower data store */
     private final Function<? super K, ? extends V> valueLoader;
@@ -62,41 +58,30 @@ public final class ReadThruRefreshAheadCache<K, V> {
             int capacity,
             Function<K, V> valueLoader,
             ExecutorService executorService,
+            boolean removeEntryWhenValueLoaderReturnsNull,
+            @Nullable BiConsumer<K, Exception> onValueLoadException,
             @Nullable Consumer<K> onBeforeRefresh,
-            @Nullable BiConsumer<K, V> onAfterBackgroundRefresh,
-            @Nullable BiConsumer<K, Exception> onRefreshFailure,
             @Nullable Consumer<K> onCacheHit,
             @Nullable Consumer<K> onCacheMiss,
             @Nullable Runnable onAfterChange) {
 
         requireNonNull(executorService, "executorService is required and null.");
+        requireNonNull(onValueLoadException, "onValueLoadException is required and null.");
         requireNonNull(valueLoader, "valueLoader is required and null.");
 
         this.executorService = executorService;
         this.onBeforeRefresh = requireNonNullElse(onBeforeRefresh, NO_OP);
         this.onCacheHit = requireNonNullElse(onCacheHit, NO_OP);
         this.onCacheMiss = requireNonNullElse(onCacheMiss, NO_OP);
+        this.onValueLoadException = onValueLoadException;
+        this.removeEntryWhenValueLoaderReturnsNull = removeEntryWhenValueLoaderReturnsNull;
         this.valueLoader = valueLoader;
-
-        if (onAfterBackgroundRefresh == null) {
-            this.onAfterBackgroundRefresh = (ignored0, ignored1) -> {
-            };
-        } else {
-            this.onAfterBackgroundRefresh = onAfterBackgroundRefresh;
-        }
 
         if (onAfterChange == null) {
             this.onAfterChange = () -> {
             };
         } else {
             this.onAfterChange = onAfterChange;
-        }
-
-        if (onRefreshFailure == null) {
-            this.onRefreshFailure = (ignored0, ignored1) -> {
-            };
-        } else {
-            this.onRefreshFailure = onRefreshFailure;
         }
 
         cache = new ConcurrentHashMap<>(capacity);
@@ -136,7 +121,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
      * 1. Returns local non-null value
      * 2. Refreshes value in background
      *
-     * @param key
+     * <p>
+     * All valueLoader exceptions propagated thru this::onValueLoadException (both sync and async)
+     *
+     * @param key         - id for value to retrieve value from local cache or from valueLoader
      * @param bypassCache TODO
      * @return V or null if unavailable in both cache and valueLoader
      */
@@ -151,18 +139,42 @@ public final class ReadThruRefreshAheadCache<K, V> {
             onCacheHit.accept(key);
         }
 
+        // -- Got a cached value and cache is permitted
         if (!bypassCache && valueInCache != null) {
             refreshLater(key);
             return valueInCache;
         }
 
-        final V value = valueLoader.apply(key);
-        if (value != null) {
-            cache.put(key, value);
-            onAfterChange.run();
+        // -- Attempt to load
+        final V value;
+        try {
+            value = valueLoader.apply(key);
+
+        } catch (Exception ex) {
+            onValueLoadException.accept(key, ex);
+            return null;
         }
 
-        return value;
+        // -- Cache "good" values
+        if (value != null) {
+            final V old = cache.put(key, value);
+            if (!Objects.equals(old, value)) {
+                onAfterChange.run();
+            }
+
+            return value;
+        }
+
+        // -- Invariant: value == null
+
+        if (removeEntryWhenValueLoaderReturnsNull) {
+            final V old = cache.remove(key);
+            if (old != null) {
+                onAfterChange.run();
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -243,18 +255,23 @@ public final class ReadThruRefreshAheadCache<K, V> {
             value = valueLoader.apply(key);
 
         } catch (Exception ex) {
-            onRefreshFailure.accept(key, ex);
+            onValueLoadException.accept(key, ex);
             return;
         }
 
-        if (value == null) {
-            // -- No state change for null value
+        if (value != null) {
+            cache.put(key, value);
+            onAfterChange.run();
             return;
         }
 
-        cache.put(key, value);
-        onAfterChange.run();
+        if (removeEntryWhenValueLoaderReturnsNull) {
+            final V old = cache.remove(key);
+            if (old == null) {
+                return;
+            }
 
-        onAfterBackgroundRefresh.accept(key, value);
+            onAfterChange.run();
+        }
     }
 }
