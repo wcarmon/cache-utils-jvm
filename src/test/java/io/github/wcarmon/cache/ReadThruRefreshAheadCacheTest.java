@@ -23,7 +23,6 @@ import java.util.concurrent.Executors;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -31,7 +30,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.verification.VerificationMode;
 
-@Timeout(value = 20, unit = SECONDS)
+@Timeout(value = 20L, unit = SECONDS)
 class ReadThruRefreshAheadCacheTest {
 
     ExecutorService executorService;
@@ -89,7 +88,6 @@ class ReadThruRefreshAheadCacheTest {
         subject.put(k, 3);
         assumeTrue(subject.containsKey(k));
 
-
         // -- Act
         final Integer got = subject.get(k, false);
 
@@ -136,7 +134,6 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnBeforeRefresh);
         verifyNoInteractions(mockOnCacheHit);
 
-
         // -- Assert: state
         assertFalse(subject.containsKey(k));
         assertTrue(subject.isEmpty());
@@ -144,12 +141,11 @@ class ReadThruRefreshAheadCacheTest {
 
     @Test
     @Timeout(value = 3, unit = SECONDS)
-    void testValueInCache_bypassCache_valueLoaderReturnsNonNull() throws Exception {
+    void testValueInCache_bypassCache_valueLoaderReturnsNonNull() {
         // -- Arrange
         final String k = "theKey";
 
-        when(mockValueLoader.apply(eq(k)))
-                .thenReturn(9);
+        when(mockValueLoader.apply(eq(k))).thenReturn(9);
 
         subject.put(k, 2);
         assumeTrue(subject.containsKey(k));
@@ -170,7 +166,6 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnCacheMiss);
         verifyNoInteractions(mockOnValueLoadException);
 
-
         // -- Assert: state
         assertTrue(subject.containsKey(k));
         assertEquals(9, getInternalCacheMap().get(k));
@@ -189,8 +184,7 @@ class ReadThruRefreshAheadCacheTest {
 
         final String k = "theKey";
 
-        when(mockValueLoader.apply(eq(k)))
-                .thenReturn(null);
+        when(mockValueLoader.apply(eq(k))).thenReturn(null);
 
         subject.put(k, 2);
         assumeTrue(subject.containsKey(k));
@@ -232,8 +226,7 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
         final String k = "theKey";
 
-        when(mockValueLoader.apply(eq(k)))
-                .thenReturn(8);
+        when(mockValueLoader.apply(eq(k))).thenReturn(8);
 
         subject.put(k, 7);
         assumeFalse(subject.isEmpty());
@@ -245,7 +238,6 @@ class ReadThruRefreshAheadCacheTest {
         // -- Assert: output
         assertEquals(7, got);
 
-
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
         verify(mockOnAfterChange, vMode).run();
@@ -256,7 +248,6 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnCacheMiss);
         verifyNoInteractions(mockOnValueLoadException);
 
-
         // -- Assert: state
         assertEquals(1, subject.size());
         assertFalse(subject.isEmpty());
@@ -266,8 +257,7 @@ class ReadThruRefreshAheadCacheTest {
     @ParameterizedTest
     @Timeout(value = 3, unit = SECONDS)
     @ValueSource(booleans = {true, false})
-    void testValueInCache_valueLoaderReturnsNull(
-            boolean removeEntryWhenValueLoaderReturnsNull) {
+    void testValueInCache_valueLoaderReturnsNull(boolean removeEntryWhenValueLoaderReturnsNull) {
 
         // -- Arrange
 
@@ -276,20 +266,17 @@ class ReadThruRefreshAheadCacheTest {
 
         final String k = "theKey";
 
-        when(mockValueLoader.apply(eq(k)))
-                .thenReturn(null);
+        when(mockValueLoader.apply(eq(k))).thenReturn(null);
 
         subject.put(k, 4);
         assumeFalse(subject.isEmpty());
         assumeTrue(subject.containsKey(k));
-
 
         // -- Act
         final Integer got = subject.get(k, false);
 
         // -- Assert: output
         assertEquals(4, got);
-
 
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
@@ -322,8 +309,7 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
         final String k = "theKey";
 
-        when(mockValueLoader.apply(eq(k)))
-                .thenReturn(6);
+        when(mockValueLoader.apply(eq(k))).thenReturn(6);
 
         // -- Act
         final Integer got = subject.get(k, true);
@@ -354,8 +340,7 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
         final String k = "theKey";
 
-        when(mockValueLoader.apply(eq(k)))
-                .thenReturn(null);
+        when(mockValueLoader.apply(eq(k))).thenReturn(null);
 
         // -- Act
         final Integer got = subject.get(k, true);
@@ -373,7 +358,6 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnCacheHit);
         verifyNoInteractions(mockOnValueLoadException);
 
-
         // -- Assert: state
         assertTrue(subject.isEmpty());
         assertFalse(subject.containsKey(k));
@@ -384,8 +368,7 @@ class ReadThruRefreshAheadCacheTest {
     void testValueNotInCache_valueLoaderReturnsNonNull() {
         // -- Arrange
         final String k = "theKey";
-        when(mockValueLoader.apply(eq(k)))
-                .thenReturn(3);
+        when(mockValueLoader.apply(eq(k))).thenReturn(3);
 
         assumeTrue(subject.isEmpty());
         assumeFalse(subject.containsKey(k));
@@ -395,7 +378,6 @@ class ReadThruRefreshAheadCacheTest {
 
         // -- Assert: output
         assertEquals(3, got);
-
 
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
@@ -407,7 +389,6 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnBeforeRefresh);
         verifyNoInteractions(mockOnCacheHit);
         verifyNoInteractions(mockOnValueLoadException);
-
 
         // -- Assert: state
         assertEquals(1, subject.size());
@@ -422,8 +403,7 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
         final String k = "theKey";
 
-        when(mockValueLoader.apply(eq(k)))
-                .thenReturn(null);
+        when(mockValueLoader.apply(eq(k))).thenReturn(null);
 
         assumeFalse(subject.containsKey(k));
 
@@ -432,7 +412,6 @@ class ReadThruRefreshAheadCacheTest {
 
         // -- Assert: output
         assertNull(got);
-
 
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
@@ -449,7 +428,8 @@ class ReadThruRefreshAheadCacheTest {
         assertTrue(subject.isEmpty());
     }
 
-    private ReadThruRefreshAheadCache<String, Integer> buildSubject(boolean removeEntryWhenValueLoaderReturnsNull) {
+    private ReadThruRefreshAheadCache<String, Integer> buildSubject(
+            boolean removeEntryWhenValueLoaderReturnsNull) {
         return ReadThruRefreshAheadCache.<String, Integer>builder()
                 .capacity(64)
                 .executorService(executorService)

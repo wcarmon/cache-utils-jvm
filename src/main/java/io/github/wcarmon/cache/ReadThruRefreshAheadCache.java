@@ -11,7 +11,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -23,8 +22,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ReadThruRefreshAheadCache<K, V> {
 
-    private static final Consumer<Object> NO_OP = ignored -> {
-    };
+    private static final Consumer<Object> NO_OP = ignored -> {};
 
     private final ConcurrentMap<K, V> cache;
 
@@ -44,7 +42,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
     private final Consumer<? super K> onCacheMiss;
 
     /** Executes after failing to load value from valueLoader */
-    private final BiConsumer<K, Exception> onValueLoadException;
+    private final @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException;
 
     private final boolean removeEntryWhenValueLoaderReturnsNull;
 
@@ -53,10 +51,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
 
     private ReadThruRefreshAheadCache(
             int capacity,
-            Function<K, V> valueLoader,
+            Function<? super K, ? extends V> valueLoader,
             ExecutorService executorService,
             boolean removeEntryWhenValueLoaderReturnsNull,
-            @Nullable BiConsumer<K, Exception> onValueLoadException,
+            @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException,
             @Nullable Consumer<K> onBeforeRefresh,
             @Nullable Consumer<K> onCacheHit,
             @Nullable Consumer<K> onCacheMiss,
@@ -75,8 +73,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         this.valueLoader = valueLoader;
 
         if (onAfterChange == null) {
-            this.onAfterChange = () -> {
-            };
+            this.onAfterChange = () -> {};
         } else {
             this.onAfterChange = onAfterChange;
         }
@@ -85,7 +82,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     public static <K, V> ReadThruRefreshAheadCacheBuilder<K, V> builder() {
-        return new ReadThruRefreshAheadCacheBuilder<K, V>();
+        return new ReadThruRefreshAheadCacheBuilder<>();
     }
 
     private static void requireNonBlankKey(Object key) {
@@ -288,11 +285,19 @@ public final class ReadThruRefreshAheadCache<K, V> {
         private boolean removeEntryWhenValueLoaderReturnsNull;
         private Function<K, V> valueLoader;
 
-        ReadThruRefreshAheadCacheBuilder() {
-        }
+        ReadThruRefreshAheadCacheBuilder() {}
 
         public ReadThruRefreshAheadCache<K, V> build() {
-            return new ReadThruRefreshAheadCache<K, V>(this.capacity, this.valueLoader, this.executorService, this.removeEntryWhenValueLoaderReturnsNull, this.onValueLoadException, this.onBeforeRefresh, this.onCacheHit, this.onCacheMiss, this.onAfterChange);
+            return new ReadThruRefreshAheadCache<>(
+                    this.capacity,
+                    this.valueLoader,
+                    this.executorService,
+                    this.removeEntryWhenValueLoaderReturnsNull,
+                    this.onValueLoadException,
+                    this.onBeforeRefresh,
+                    this.onCacheHit,
+                    this.onCacheMiss,
+                    this.onAfterChange);
         }
 
         public ReadThruRefreshAheadCacheBuilder<K, V> capacity(int capacity) {
@@ -300,17 +305,20 @@ public final class ReadThruRefreshAheadCache<K, V> {
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> executorService(ExecutorService executorService) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> executorService(
+                ExecutorService executorService) {
             this.executorService = executorService;
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> onAfterChange(@Nullable Runnable onAfterChange) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> onAfterChange(
+                @Nullable Runnable onAfterChange) {
             this.onAfterChange = onAfterChange;
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> onBeforeRefresh(@Nullable Consumer<K> onBeforeRefresh) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> onBeforeRefresh(
+                @Nullable Consumer<K> onBeforeRefresh) {
             this.onBeforeRefresh = onBeforeRefresh;
             return this;
         }
@@ -320,23 +328,44 @@ public final class ReadThruRefreshAheadCache<K, V> {
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> onCacheMiss(@Nullable Consumer<K> onCacheMiss) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> onCacheMiss(
+                @Nullable Consumer<K> onCacheMiss) {
             this.onCacheMiss = onCacheMiss;
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> onValueLoadException(@Nullable BiConsumer<K, Exception> onValueLoadException) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> onValueLoadException(
+                @Nullable BiConsumer<K, Exception> onValueLoadException) {
             this.onValueLoadException = onValueLoadException;
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> removeEntryWhenValueLoaderReturnsNull(boolean removeEntryWhenValueLoaderReturnsNull) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> removeEntryWhenValueLoaderReturnsNull(
+                boolean removeEntryWhenValueLoaderReturnsNull) {
             this.removeEntryWhenValueLoaderReturnsNull = removeEntryWhenValueLoaderReturnsNull;
             return this;
         }
 
         public String toString() {
-            return "ReadThruRefreshAheadCache.ReadThruRefreshAheadCacheBuilder(capacity=" + this.capacity + ", valueLoader=" + this.valueLoader + ", executorService=" + this.executorService + ", removeEntryWhenValueLoaderReturnsNull=" + this.removeEntryWhenValueLoaderReturnsNull + ", onValueLoadException=" + this.onValueLoadException + ", onBeforeRefresh=" + this.onBeforeRefresh + ", onCacheHit=" + this.onCacheHit + ", onCacheMiss=" + this.onCacheMiss + ", onAfterChange=" + this.onAfterChange + ")";
+            return "ReadThruRefreshAheadCache.ReadThruRefreshAheadCacheBuilder(capacity="
+                    + this.capacity
+                    + ", valueLoader="
+                    + this.valueLoader
+                    + ", executorService="
+                    + this.executorService
+                    + ", removeEntryWhenValueLoaderReturnsNull="
+                    + this.removeEntryWhenValueLoaderReturnsNull
+                    + ", onValueLoadException="
+                    + this.onValueLoadException
+                    + ", onBeforeRefresh="
+                    + this.onBeforeRefresh
+                    + ", onCacheHit="
+                    + this.onCacheHit
+                    + ", onCacheMiss="
+                    + this.onCacheMiss
+                    + ", onAfterChange="
+                    + this.onAfterChange
+                    + ")";
         }
 
         public ReadThruRefreshAheadCacheBuilder<K, V> valueLoader(Function<K, V> valueLoader) {
