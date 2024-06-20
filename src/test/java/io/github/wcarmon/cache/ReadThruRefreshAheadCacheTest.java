@@ -87,25 +87,39 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     @Test
-    void testGetAbsentValueBypassCache() {
-        // TODO: value absent + bypassCache
+    void testValueInCache_bypassCache_valueLoaderReturnsNonNull() {
+        // -- Arrange
+        final String k = "theKey";
+
+        // -- Act
+        final Integer got = subject.get(k, true);
+
+        // -- Assert: output
+        // TODO
+
+        // -- Assert: callbacks
+        // TODO
+
+        // -- Assert: state
+        // TODO
     }
 
     @Test
-    void testGetAbsentValueUseCache() {
-        // TODO: value absent + !bypassCache
+    void testValueInCache_bypassCache_valueLoaderReturnsNull() {
+        // -- Arrange
+        final String k = "theKey";
 
-    }
+        // -- Act
+        final Integer got = subject.get(k, true);
 
-    @Test
-    void testGetPresentValueBypassCache() {
-        // TODO: value present + bypassCache
-    }
+        // -- Assert: output
+        // TODO
 
-    @Test
-    void testGetPresentValueUseCache() {
-        // TODO: value present + !bypassCache
+        // -- Assert: callbacks
+        // TODO
 
+        // -- Assert: state
+        // TODO
     }
 
     @Test
@@ -177,6 +191,42 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     @Test
+    void testValueNotInCache_bypassCache_valueLoaderReturnsNonNull() {
+        // -- Arrange
+        final String k = "theKey";
+
+        // -- Act
+        final Integer got = subject.get(k, true);
+
+        // -- Assert: output
+        // TODO
+
+        // -- Assert: callbacks
+        // TODO
+
+        // -- Assert: state
+        // TODO
+    }
+
+    @Test
+    void testValueNotInCache_bypassCache_valueLoaderReturnsNull() {
+        // -- Arrange
+        final String k = "theKey";
+
+        // -- Act
+        final Integer got = subject.get(k, true);
+
+        // -- Assert: output
+        // TODO
+
+        // -- Assert: callbacks
+        // TODO
+
+        // -- Assert: state
+        // TODO
+    }
+
+    @Test
     void testValueNotInCache_valueLoaderReturnsNonNull() {
         // -- Arrange
         final String k = "theKey";
@@ -218,6 +268,9 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
         final String k = "theKey";
 
+        when(mockValueLoader.apply(eq(k)))
+                .thenReturn(null);
+
         assumeFalse(subject.containsKey(k));
 
         // -- Act
@@ -229,12 +282,12 @@ class ReadThruRefreshAheadCacheTest {
 
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
-        verify(mockOnBeforeRefresh, vMode).accept(eq(k));
         verify(mockOnCacheMiss, vMode).accept(eq(k));
         verify(mockValueLoader, vMode).apply(eq(k));
 
         verifyNoInteractions(mockOnAfterBackgroundRefresh);
         verifyNoInteractions(mockOnAfterChange);
+        verifyNoInteractions(mockOnBeforeRefresh);
         verifyNoInteractions(mockOnCacheHit);
         verifyNoInteractions(mockOnRefreshFailure);
 
