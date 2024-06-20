@@ -27,12 +27,30 @@ public final class ReadThruRefreshAheadCache<K, V> {
     };
 
     private final ConcurrentMap<K, V> cache;
+
+    /**
+     * Executes background tasks like refreshing entries.
+     */
     private final ExecutorService executorService;
-    private final BiConsumer<? super K, ? super V> onAfterRefresh;
-    private final Consumer<? super K> onBeforeRefresh;
-    private final Consumer<? super K> onCacheHit;
-    private final Consumer<? super K> onCacheMiss;
+    /** Executes after a successful refresh. */
+    private final BiConsumer<? super K, ? super V> onAfterBackgroundRefresh;
+    /**
+     * Executes after any insert, update, or remove.
+     */
     private final Runnable onAfterChange;
+    /** Executes before an entry refresh. */
+    private final Consumer<? super K> onBeforeRefresh;
+
+    /** Executes after this::get finds a matching entry in this::cache */
+    private final Consumer<? super K> onCacheHit;
+
+    /** Executes after this::get fails to find a matching entry in in this::cache */
+    private final Consumer<? super K> onCacheMiss;
+
+    /** Executes after failing to refresh an entry */
+    private final BiConsumer<K, Exception> onRefreshFailure;
+
+    /** Given a key, retrieves a value from a slower data store */
     private final Function<? super K, ? extends V> valueLoader;
 
     // TODO: delombok
@@ -42,7 +60,8 @@ public final class ReadThruRefreshAheadCache<K, V> {
             Function<K, V> valueLoader,
             ExecutorService executorService,
             @Nullable Consumer<K> onBeforeRefresh,
-            @Nullable BiConsumer<K, V> onAfterRefresh,
+            @Nullable BiConsumer<K, V> onAfterBackgroundRefresh,
+            @Nullable BiConsumer<K, Exception> onRefreshFailure,
             @Nullable Consumer<K> onCacheHit,
             @Nullable Consumer<K> onCacheMiss,
             @Nullable Runnable onAfterChange) {
@@ -56,11 +75,11 @@ public final class ReadThruRefreshAheadCache<K, V> {
         this.onCacheMiss = requireNonNullElse(onCacheMiss, NO_OP);
         this.valueLoader = valueLoader;
 
-        if (onAfterRefresh == null) {
-            this.onAfterRefresh = (ignored0, ignored1) -> {
+        if (onAfterBackgroundRefresh == null) {
+            this.onAfterBackgroundRefresh = (ignored0, ignored1) -> {
             };
         } else {
-            this.onAfterRefresh = onAfterRefresh;
+            this.onAfterBackgroundRefresh = onAfterBackgroundRefresh;
         }
 
         if (onAfterChange == null) {
@@ -68,6 +87,13 @@ public final class ReadThruRefreshAheadCache<K, V> {
             };
         } else {
             this.onAfterChange = onAfterChange;
+        }
+
+        if (onRefreshFailure == null) {
+            this.onRefreshFailure = (ignored0, ignored1) -> {
+            };
+        } else {
+            this.onRefreshFailure = onRefreshFailure;
         }
 
         cache = new ConcurrentHashMap<>(capacity);
@@ -99,20 +125,49 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     /**
+     * Case #1: When value absent from cache ...
+     * 1. Loads value in foreground
+     * 2. Stores non-null result in cache
+     * <p>
+     * Case #2: When value present in cache ...
+     * 1. Returns local non-null value
+     * 2. Refreshes value in background
+     *
      * @param key
      * @param bypassCache TODO
-     * @return V or null if unavailable in both cache and datasource
+     * @return V or null if unavailable in both cache and valueLoader
      */
+    @Nullable
     public V get(K key, boolean bypassCache) {
         requireNonBlankKey(key);
 
-        throw new RuntimeException("TODO: implement get");
+        V valueInCache = cache.get(key);
+
+        if (valueInCache == null) {
+            onCacheMiss.accept(key);
+        }
+
+        if (bypassCache || valueInCache == null) {
+            final V value = valueLoader.apply(key);
+            if (value != null) {
+                cache.put(key, value);
+                onAfterChange.run();
+            }
+
+            return value;
+        }
+
+        // TODO: queue background refresh here
+
+        onCacheHit.accept(key);
+        return valueInCache;
     }
 
     /**
      * @param key
      * @return V or null if unavailable in both cache and datasource
      */
+    @Nullable
     public V get(K key) {
         requireNonBlankKey(key);
 
