@@ -98,6 +98,7 @@ class ReadThruRefreshAheadCacheTest {
                 .thenReturn(9);
 
         subject.put(k, 2);
+        assumeTrue(subject.containsKey(k));
 
         // -- Act
         final Integer got = subject.get(k, true);
@@ -135,17 +136,28 @@ class ReadThruRefreshAheadCacheTest {
         when(mockValueLoader.apply(eq(k)))
                 .thenReturn(null);
 
+        subject.put(k, 2);
+        assumeTrue(subject.containsKey(k));
+
         // -- Act
         final Integer got = subject.get(k, true);
 
         // -- Assert: output
-        // TODO
+        assertNull(got);
 
         // -- Assert: callbacks
-        // TODO
+        final VerificationMode vMode = timeout(1000L).times(1);
+//        verify(mockOnAfterChange, vMode).run();  // TODO: decide on this
+        verify(mockOnCacheHit, vMode).accept(eq(k));
+        verify(mockValueLoader, vMode).apply(eq(k));
+
+        verifyNoInteractions(mockOnAfterBackgroundRefresh);
+        verifyNoInteractions(mockOnBeforeRefresh);
+        verifyNoInteractions(mockOnCacheMiss);
+        verifyNoInteractions(mockOnRefreshFailure);
 
         // -- Assert: state
-        // TODO
+        assertTrue(subject.containsKey(k)); // TODO: decide on this
     }
 
     @Test

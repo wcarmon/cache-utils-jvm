@@ -144,25 +144,25 @@ public final class ReadThruRefreshAheadCache<K, V> {
     public V get(K key, boolean bypassCache) {
         requireNonBlankKey(key);
 
-        V valueInCache = cache.get(key);
+        final V valueInCache = cache.get(key);
         if (valueInCache == null) {
             onCacheMiss.accept(key);
         } else {
             onCacheHit.accept(key);
         }
 
-        if (bypassCache || valueInCache == null) {
-            final V value = valueLoader.apply(key);
-            if (value != null) {
-                cache.put(key, value);
-                onAfterChange.run();
-            }
-
-            return value;
+        if (!bypassCache && valueInCache != null) {
+            refreshLater(key);
+            return valueInCache;
         }
 
-        refreshLater(key);
-        return valueInCache;
+        final V value = valueLoader.apply(key);
+        if (value != null) {
+            cache.put(key, value);
+            onAfterChange.run();
+        }
+
+        return value;
     }
 
     /**
@@ -177,9 +177,9 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     /**
-     * TODO
+     * checks if cache contains entries
      *
-     * @return TODO
+     * @return true when cache has zero entries
      */
     public boolean isEmpty() {
         return cache.isEmpty();
@@ -199,12 +199,12 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     /**
-     * TODO
+     * Efficiently stores all passed entries
      *
-     * @param m TODO
+     * @param map entries to store in the cache
      */
-    public void putAll(Map<? extends K, ? extends V> m) {
-        cache.putAll(m);
+    public void putAll(Map<? extends K, ? extends V> map) {
+        cache.putAll(map);
     }
 
     /**
