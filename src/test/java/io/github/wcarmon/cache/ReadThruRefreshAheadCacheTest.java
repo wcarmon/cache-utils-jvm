@@ -183,6 +183,10 @@ class ReadThruRefreshAheadCacheTest {
             boolean removeEntryWhenValueLoaderReturnsNull) {
 
         // -- Arrange
+
+        // -- reconfigure subject
+        subject = buildSubject(removeEntryWhenValueLoaderReturnsNull);
+
         final String k = "theKey";
 
         when(mockValueLoader.apply(eq(k)))
@@ -264,9 +268,12 @@ class ReadThruRefreshAheadCacheTest {
     @ValueSource(booleans = {true, false})
     void testValueInCache_valueLoaderReturnsNull(
             boolean removeEntryWhenValueLoaderReturnsNull) {
-        subject = buildSubject(removeEntryWhenValueLoaderReturnsNull);
 
         // -- Arrange
+
+        // -- reconfigure subject
+        subject = buildSubject(removeEntryWhenValueLoaderReturnsNull);
+
         final String k = "theKey";
 
         when(mockValueLoader.apply(eq(k)))

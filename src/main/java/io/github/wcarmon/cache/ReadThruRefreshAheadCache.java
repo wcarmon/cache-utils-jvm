@@ -125,7 +125,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
      * All valueLoader exceptions propagated thru this::onValueLoadException (both sync and async)
      *
      * @param key         - id for value to retrieve value from local cache or from valueLoader
-     * @param bypassCache TODO
+     * @param bypassCache true: ignore values in cache, go straight to valueLoader, refresh cache
      * @return V or null if unavailable in both cache and valueLoader
      */
     @Nullable
