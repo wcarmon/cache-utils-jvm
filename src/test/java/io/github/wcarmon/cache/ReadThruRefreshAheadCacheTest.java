@@ -189,7 +189,7 @@ class ReadThruRefreshAheadCacheTest {
 
 
     @Test
-//    @Timeout(value = 3, unit = SECONDS) // TODO: restore this
+    @Timeout(value = 5, unit = SECONDS)
     void testItemsAddedWithTTL_valuePresent() throws Exception {
 
         // -- Arrange
@@ -205,33 +205,33 @@ class ReadThruRefreshAheadCacheTest {
         assumeTrue(subject.containsKey(k));
 
         // -- Act
-//        final Integer got = subject.get(k, false);
-//        assertEquals(17, got);
-//        assertTrue(subject.containsKey(k));
-//
-//        Thread.sleep(ttl.plusMillis(10));
-//
-//        // -- Assert: output
-//        final Integer got2 = subject.get(k, false);
-//        assertEquals(18, got2);
-//        assertTrue(subject.containsKey(k));
-//
-//
-//        // -- Assert: callbacks
-//        verify(mockOnCacheMiss, times(2)).accept(eq(k));
-//        verify(mockValueLoader, times(2)).apply(eq(k));
-//
-//        verifyNoInteractions(mockOnBeforeRefresh);
-//        verifyNoInteractions(mockOnCacheHit);
-//        verifyNoInteractions(mockOnValueLoadException);
-//
-//        // Two inserts, two TTL expirations
-//        final VerificationMode vMode = timeout(ttl.plus(ttl).toMillis()).times(4);
-//        verify(mockOnAfterChange, vMode).run();
-//
-//
-//        // -- Assert: state
-//        assertFalse(subject.containsKey(k)); // expired
+        final Integer got = subject.get(k, false);
+        assertEquals(10, got);
+
+        Thread.sleep(ttl.plusMillis(10));
+
+        // -- Assert: output
+        final Integer got2 = subject.get(k, false);
+        assertEquals(12, got2); // 11 expires
+        assertTrue(subject.containsKey(k));
+
+
+        // -- Assert: callbacks
+        final var vMode = timeout(ttl.plus(ttl).toMillis());
+        verify(mockOnBeforeRefresh, vMode.times(1)).accept(eq(k));
+        verify(mockOnCacheHit, vMode.times(1)).accept(eq(k));
+        verify(mockOnCacheMiss, vMode.times(1)).accept(eq(k));
+        verify(mockValueLoader, vMode.times(2)).apply(eq(k));
+
+        verifyNoInteractions(mockOnValueLoadException);
+
+        // Two inserts, two TTL expirations
+        verify(mockOnAfterChange, vMode.times(4)).run();
+
+
+        // -- Assert: state
+        Thread.sleep(ttl.plusMillis(10));
+        assertFalse(subject.containsKey(k)); // expired
     }
 
     @Test
@@ -566,17 +566,9 @@ class ReadThruRefreshAheadCacheTest {
         }
     }
 
-    // TODO: testItemsAddedWithTTL, but test when there is a async refresh
-
-    // TODO: test TTL: entries added with a TTL (when configured)
-
     // TODO: test TTL: entry removed after TTL
 
     // TODO: test TTL: cleanup for removed entry doesn't throw
-
-    // TODO: test TTL: clean up for TTL affects some callbacks (onAfterChange, )
-
-    // TODO: test TTL: updated entry retained at first TTL period, then removed after second TTL
 
     // TODO: avoid duplicate refresh for key in brief period
 }

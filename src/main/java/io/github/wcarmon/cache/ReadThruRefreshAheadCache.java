@@ -173,14 +173,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
 
         // -- Cache "good" values
         if (value != null) {
-
-            @Nullable final ScheduledFuture<?> future = scheduleExpiration(key);
-            final CacheEntry<V> entry = new CacheEntry<>(value, future);
-            final CacheEntry<V> old = cache.put(key, entry);
-
-            if (old == null || !Objects.equals(value, old.value())) {
-                onAfterChange.run();
-            }
+            putInternal(key, value);
 
             return value;
         }
@@ -188,10 +181,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         // -- Invariant: value == null
 
         if (removeEntryWhenValueLoaderReturnsNull) {
-            final CacheEntry<V> old = cache.remove(key);
-            if (old != null) {
-                onAfterChange.run();
-            }
+            removeInternal(key);
         }
 
         return null;
@@ -242,17 +232,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
     public V remove(K key) {
         requireNonBlankKey(key);
 
-        final CacheEntry<V> old = cache.remove(key);
-        if (old == null) {
-            return null;
-        }
-
-        if (old.expiration() != null) {
-            old.expiration().cancel(false);
-        }
-
-        onAfterChange.run();
-        return old.value();
+        return removeInternal(key);
     }
 
     /**
@@ -275,7 +255,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
             old.expiration().cancel(false);
         }
 
-        onAfterChange.run();
+        final V oldValue = old == null ? null : old.value();
+        if (!Objects.equals(oldValue, value)) {
+            onAfterChange.run();
+        }
     }
 
     private void refreshLater(K key) {
@@ -299,21 +282,32 @@ public final class ReadThruRefreshAheadCache<K, V> {
         }
 
         if (value != null) {
-            @Nullable final ScheduledFuture<?> future = scheduleExpiration(key);
-            final CacheEntry<V> entry = new CacheEntry<>(value, future);
-
             putInternal(key, value);
             return;
         }
 
         if (removeEntryWhenValueLoaderReturnsNull) {
-            final CacheEntry<V> old = cache.remove(key);
-            if (old == null) {
-                return;
-            }
-
-            onAfterChange.run();
+            removeInternal(key);
         }
+    }
+
+    @Nullable
+    private V removeInternal(K key) {
+        requireNonBlankKey(key);
+
+        final CacheEntry<V> old = cache.remove(key);
+        if (old == null) {
+            return null;
+        }
+
+        if (old.expiration() != null) {
+            old.expiration().cancel(false);
+        }
+
+        // -- Invariant: oldValue != null
+
+        onAfterChange.run();
+        return old.value();
     }
 
     @Nullable
