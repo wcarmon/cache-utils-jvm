@@ -3,14 +3,15 @@ package io.github.wcarmon.cache;
 import static java.util.Objects.requireNonNull;
 import static java.util.Objects.requireNonNullElse;
 
-import java.util.Map;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -22,12 +23,13 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ReadThruRefreshAheadCache<K, V> {
 
-    private static final Consumer<Object> NO_OP = ignored -> {};
+    private static final Consumer<Object> NO_OP = ignored -> {
+    };
 
-    private final ConcurrentMap<K, V> cache;
+    private final ConcurrentMap<K, CacheEntry<V>> cache;
 
-    /** Executes background tasks like refreshing entries. */
-    private final ExecutorService executorService;
+    /** Executes background tasks like refreshing entries and entry expiration */
+    private final ScheduledExecutorService executorService;
 
     /** Executes after any insert, update, or remove. */
     private final Runnable onAfterChange;
@@ -45,15 +47,18 @@ public final class ReadThruRefreshAheadCache<K, V> {
     private final @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException;
 
     private final boolean removeEntryWhenValueLoaderReturnsNull;
-
+    /** Time to live for entries */
+    @Nullable
+    private final Duration ttl;
     /** Given a key, retrieves a value from a slower data store */
     private final Function<? super K, ? extends V> valueLoader;
 
     private ReadThruRefreshAheadCache(
             int capacity,
-            Function<? super K, ? extends V> valueLoader,
-            ExecutorService executorService,
             boolean removeEntryWhenValueLoaderReturnsNull,
+            @Nullable Duration ttl,
+            Function<? super K, ? extends V> valueLoader,
+            ScheduledExecutorService executorService,
             @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException,
             @Nullable Consumer<K> onBeforeRefresh,
             @Nullable Consumer<K> onCacheHit,
@@ -64,6 +69,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
         requireNonNull(onValueLoadException, "onValueLoadException is required and null.");
         requireNonNull(valueLoader, "valueLoader is required and null.");
 
+        if (ttl != null && ttl.toMillis() <= 0L) {
+            throw new IllegalArgumentException("ttl must be positive or null");
+        }
+
         this.executorService = executorService;
         this.onBeforeRefresh = requireNonNullElse(onBeforeRefresh, NO_OP);
         this.onCacheHit = requireNonNullElse(onCacheHit, NO_OP);
@@ -71,9 +80,11 @@ public final class ReadThruRefreshAheadCache<K, V> {
         this.onValueLoadException = onValueLoadException;
         this.removeEntryWhenValueLoaderReturnsNull = removeEntryWhenValueLoaderReturnsNull;
         this.valueLoader = valueLoader;
+        this.ttl = ttl;
 
         if (onAfterChange == null) {
-            this.onAfterChange = () -> {};
+            this.onAfterChange = () -> {
+            };
         } else {
             this.onAfterChange = onAfterChange;
         }
@@ -89,7 +100,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         requireNonNull(key, "key is required and null.");
 
         if (key instanceof String s && s.isBlank()) {
-            throw new IllegalArgumentException("key is required");
+            throw new IllegalArgumentException("key is required and blank");
         }
     }
 
@@ -101,8 +112,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     /**
-     * @param key
-     * @return
+     * Test if key is present in cache
+     *
+     * @param key - unique id for entry
+     * @return true when entry is present, else false
      */
     public boolean containsKey(K key) {
         requireNonBlankKey(key);
@@ -130,7 +143,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
     public V get(K key, boolean bypassCache) {
         requireNonBlankKey(key);
 
-        final V valueInCache = cache.get(key);
+        final CacheEntry<V> valueInCache = cache.get(key);
         if (valueInCache == null) {
             onCacheMiss.accept(key);
         } else {
@@ -140,7 +153,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         // -- Got a cached value and cache is permitted
         if (!bypassCache && valueInCache != null) {
             refreshLater(key);
-            return valueInCache;
+            return valueInCache.value();
         }
 
         // -- Attempt to load
@@ -155,8 +168,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
 
         // -- Cache "good" values
         if (value != null) {
-            final V old = cache.put(key, value);
-            if (!Objects.equals(old, value)) {
+            final CacheEntry<V> entry = CacheEntry.of(value);
+            final CacheEntry<V> old = cache.put(key, entry);
+
+            if (old == null || !Objects.equals(value, old.value())) {
                 onAfterChange.run();
             }
 
@@ -166,7 +181,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         // -- Invariant: value == null
 
         if (removeEntryWhenValueLoaderReturnsNull) {
-            final V old = cache.remove(key);
+            final CacheEntry<V> old = cache.remove(key);
             if (old != null) {
                 onAfterChange.run();
             }
@@ -176,7 +191,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     /**
-     * @param key
+     * @param key - unique id for entry
      * @return V or null if unavailable in both cache and datasource
      */
     @Nullable
@@ -198,23 +213,14 @@ public final class ReadThruRefreshAheadCache<K, V> {
     /**
      * insert entry (when absent) or replace entry (when present)
      *
-     * @param key
+     * @param key   - unique id for entry
      * @param value
      */
     public void put(K key, V value) {
         requireNonNull(key, "key is required and null.");
         requireNonNull(value, "value is required and null.");
 
-        cache.put(key, value);
-    }
-
-    /**
-     * Efficiently stores all passed entries
-     *
-     * @param map entries to store in the cache
-     */
-    public void putAll(Map<? extends K, ? extends V> map) {
-        cache.putAll(map);
+        cache.put(key, CacheEntry.of(value));
     }
 
     /**
@@ -227,7 +233,8 @@ public final class ReadThruRefreshAheadCache<K, V> {
     public V remove(K key) {
         requireNonBlankKey(key);
 
-        return cache.remove(key);
+        final CacheEntry<V> old = cache.remove(key);
+        return old == null ? null : old.value();
     }
 
     /**
@@ -246,6 +253,8 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     private void refreshNow(K key) {
+        requireNonNull(key, "key is required and null.");
+
         onBeforeRefresh.accept(key);
 
         final V value;
@@ -258,13 +267,14 @@ public final class ReadThruRefreshAheadCache<K, V> {
         }
 
         if (value != null) {
-            cache.put(key, value);
+            cache.put(key, CacheEntry.of(value));
             onAfterChange.run();
+
             return;
         }
 
         if (removeEntryWhenValueLoaderReturnsNull) {
-            final V old = cache.remove(key);
+            final CacheEntry<V> old = cache.remove(key);
             if (old == null) {
                 return;
             }
@@ -276,23 +286,26 @@ public final class ReadThruRefreshAheadCache<K, V> {
     public static class ReadThruRefreshAheadCacheBuilder<K, V> {
 
         private int capacity;
-        private ExecutorService executorService;
+        private ScheduledExecutorService executorService;
         private @Nullable Runnable onAfterChange;
         private @Nullable Consumer<K> onBeforeRefresh;
         private @Nullable Consumer<K> onCacheHit;
         private @Nullable Consumer<K> onCacheMiss;
         private @Nullable BiConsumer<K, Exception> onValueLoadException;
         private boolean removeEntryWhenValueLoaderReturnsNull;
+        private @Nullable Duration ttl;
         private Function<K, V> valueLoader;
 
-        ReadThruRefreshAheadCacheBuilder() {}
+        ReadThruRefreshAheadCacheBuilder() {
+        }
 
         public ReadThruRefreshAheadCache<K, V> build() {
             return new ReadThruRefreshAheadCache<>(
                     this.capacity,
+                    this.removeEntryWhenValueLoaderReturnsNull,
+                    this.ttl,
                     this.valueLoader,
                     this.executorService,
-                    this.removeEntryWhenValueLoaderReturnsNull,
                     this.onValueLoadException,
                     this.onBeforeRefresh,
                     this.onCacheHit,
@@ -306,7 +319,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         }
 
         public ReadThruRefreshAheadCacheBuilder<K, V> executorService(
-                ExecutorService executorService) {
+                ScheduledExecutorService executorService) {
             this.executorService = executorService;
             return this;
         }
@@ -346,26 +359,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
             return this;
         }
 
-        public String toString() {
-            return "ReadThruRefreshAheadCache.ReadThruRefreshAheadCacheBuilder(capacity="
-                    + this.capacity
-                    + ", valueLoader="
-                    + this.valueLoader
-                    + ", executorService="
-                    + this.executorService
-                    + ", removeEntryWhenValueLoaderReturnsNull="
-                    + this.removeEntryWhenValueLoaderReturnsNull
-                    + ", onValueLoadException="
-                    + this.onValueLoadException
-                    + ", onBeforeRefresh="
-                    + this.onBeforeRefresh
-                    + ", onCacheHit="
-                    + this.onCacheHit
-                    + ", onCacheMiss="
-                    + this.onCacheMiss
-                    + ", onAfterChange="
-                    + this.onAfterChange
-                    + ")";
+        public ReadThruRefreshAheadCacheBuilder<K, V> ttl(
+                @Nullable Duration ttl) {
+            this.ttl = ttl;
+            return this;
         }
 
         public ReadThruRefreshAheadCacheBuilder<K, V> valueLoader(Function<K, V> valueLoader) {

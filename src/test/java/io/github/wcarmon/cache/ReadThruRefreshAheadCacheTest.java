@@ -18,11 +18,13 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -30,10 +32,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.verification.VerificationMode;
 
-@Timeout(value = 20L, unit = SECONDS)
+@Timeout(value = 10L, unit = SECONDS)
 class ReadThruRefreshAheadCacheTest {
 
-    ExecutorService executorService;
+    ScheduledExecutorService executorService;
     CountDownLatch latch;
     Runnable mockOnAfterChange;
     Consumer<String> mockOnBeforeRefresh;
@@ -46,7 +48,7 @@ class ReadThruRefreshAheadCacheTest {
     @BeforeEach
     void setUp() {
         latch = new CountDownLatch(1);
-        executorService = Executors.newFixedThreadPool(3);
+        executorService = Executors.newScheduledThreadPool(2);
         mockOnAfterChange = mock(Runnable.class);
         mockOnBeforeRefresh = mock(Consumer.class);
         mockOnCacheHit = mock(Consumer.class);
@@ -107,7 +109,7 @@ class ReadThruRefreshAheadCacheTest {
         // -- Assert: state
         assertTrue(subject.containsKey(k));
         assertFalse(subject.isEmpty());
-        assertEquals(3, getInternalCacheMap().get(k));
+        assertEquals(3, getInternalCacheEntry(k));
     }
 
     @Test
@@ -168,7 +170,7 @@ class ReadThruRefreshAheadCacheTest {
 
         // -- Assert: state
         assertTrue(subject.containsKey(k));
-        assertEquals(9, getInternalCacheMap().get(k));
+        assertEquals(9, getInternalCacheEntry(k));
     }
 
     @ParameterizedTest
@@ -216,7 +218,7 @@ class ReadThruRefreshAheadCacheTest {
 
         } else {
             assertTrue(subject.containsKey(k));
-            assertEquals(2, getInternalCacheMap().get(k));
+            assertEquals(2, getInternalCacheEntry(k));
         }
     }
 
@@ -299,7 +301,7 @@ class ReadThruRefreshAheadCacheTest {
 
         } else {
             assertTrue(subject.containsKey(k));
-            assertEquals(4, getInternalCacheMap().get(k));
+            assertEquals(4, getInternalCacheEntry(k));
         }
     }
 
@@ -331,7 +333,7 @@ class ReadThruRefreshAheadCacheTest {
         assertFalse(subject.isEmpty());
         assertTrue(subject.containsKey(k));
 
-        assertEquals(6, getInternalCacheMap().get(k));
+        assertEquals(6, getInternalCacheEntry(k));
     }
 
     @Test
@@ -443,11 +445,24 @@ class ReadThruRefreshAheadCacheTest {
                 .build();
     }
 
-    private Map<?, ?> getInternalCacheMap() {
+    @Nullable
+    private Integer getInternalCacheEntry(String key) {
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("key is required");
+        }
+
         try {
             final Field cacheField = ReadThruRefreshAheadCache.class.getDeclaredField("cache");
             cacheField.setAccessible(true);
-            return (Map<String, Integer>) cacheField.get(subject);
+            final Map<String, CacheEntry<Integer>> mapEntry =
+                    (Map<String, CacheEntry<Integer>>) cacheField.get(subject);
+
+            final CacheEntry<Integer> cacheEntry = mapEntry.get(key);
+            if (cacheEntry == null) {
+                return null;
+            }
+
+            return cacheEntry.value();
 
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -455,4 +470,7 @@ class ReadThruRefreshAheadCacheTest {
     }
 
     // TODO: avoid duplicate refresh for key in brief period
+
+    // TODO: test TTL: entry removed after TTL
+    // TODO: test TTL: updated entry retained at first TTL period, then removed after second TTL period
 }
