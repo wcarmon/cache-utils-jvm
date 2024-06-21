@@ -33,8 +33,11 @@ public final class ReadThruRefreshAheadCache<K, V> {
     /** Executes background tasks like refreshing entries and entry expiration */
     private final ScheduledExecutorService executorService;
 
-    /** Executes after any insert, update, or remove. */
-    private final Runnable onAfterChange;
+    /**
+     * Executes after any insert, update, or remove.
+     * invoked with the oldValue (possibly null) and the newValue (possibly null).
+     */
+    private final BiConsumer<? super V, ? super V> onAfterChange;
 
     /** Executes before an entry refresh. */
     private final Consumer<? super K> onBeforeRefresh;
@@ -68,7 +71,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
             @Nullable Consumer<K> onBeforeRefresh,
             @Nullable Consumer<K> onCacheHit,
             @Nullable Consumer<K> onCacheMiss,
-            @Nullable Runnable onAfterChange) {
+            @Nullable BiConsumer<? super V, ? super V> onAfterChange) {
 
         requireNonNull(executorService, "executorService is required and null.");
         requireNonNull(onValueLoadException, "onValueLoadException is required and null.");
@@ -88,7 +91,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         this.ttl = ttl;
 
         if (onAfterChange == null) {
-            this.onAfterChange = () -> {
+            this.onAfterChange = (oldValue, newValue) -> {
             };
         } else {
             this.onAfterChange = onAfterChange;
@@ -257,7 +260,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
 
         final V oldValue = old == null ? null : old.value();
         if (!Objects.equals(oldValue, value)) {
-            onAfterChange.run();
+            onAfterChange.accept(oldValue, value);
         }
     }
 
@@ -306,8 +309,9 @@ public final class ReadThruRefreshAheadCache<K, V> {
 
         // -- Invariant: oldValue != null
 
-        onAfterChange.run();
-        return old.value();
+        final V oldValue = old.value();
+        onAfterChange.accept(oldValue, null);
+        return oldValue;
     }
 
     @Nullable
@@ -328,7 +332,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
 
         private int capacity;
         private ScheduledExecutorService executorService;
-        private @Nullable Runnable onAfterChange;
+        private @Nullable BiConsumer<? super V, ? super V> onAfterChange;
         private @Nullable Consumer<K> onBeforeRefresh;
         private @Nullable Consumer<K> onCacheHit;
         private @Nullable Consumer<K> onCacheMiss;
@@ -366,7 +370,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         }
 
         public ReadThruRefreshAheadCacheBuilder<K, V> onAfterChange(
-                @Nullable Runnable onAfterChange) {
+                @Nullable BiConsumer<? super V, ? super V> onAfterChange) {
             this.onAfterChange = onAfterChange;
             return this;
         }

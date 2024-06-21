@@ -8,13 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.*;
 
 import java.lang.reflect.Field;
 import java.time.Duration;
@@ -39,7 +34,7 @@ class ReadThruRefreshAheadCacheTest {
 
     ScheduledExecutorService executorService;
     CountDownLatch latch;
-    Runnable mockOnAfterChange;
+    BiConsumer<Integer, Integer> mockOnAfterChange;
     Consumer<String> mockOnBeforeRefresh;
     Consumer<String> mockOnCacheHit;
     Consumer<String> mockOnCacheMiss;
@@ -51,7 +46,7 @@ class ReadThruRefreshAheadCacheTest {
     void setUp() {
         latch = new CountDownLatch(1);
         executorService = Executors.newScheduledThreadPool(2);
-        mockOnAfterChange = mock(Runnable.class);
+        mockOnAfterChange = mock(BiConsumer.class);
         mockOnBeforeRefresh = mock(Consumer.class);
         mockOnCacheHit = mock(Consumer.class);
         mockOnCacheMiss = mock(Consumer.class);
@@ -179,8 +174,11 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnValueLoadException);
 
         // Two inserts, two TTL expirations
-        final VerificationMode vMode = timeout(ttl.plus(ttl).toMillis()).times(4);
-        verify(mockOnAfterChange, vMode).run();
+        final VerificationMode vMode = timeout(ttl.plus(ttl).toMillis());
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(17));
+        verify(mockOnAfterChange, vMode).accept(eq(17), eq(null));
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(18));
+        verify(mockOnAfterChange, vMode).accept(eq(18), eq(null));
 
 
         // -- Assert: state
@@ -226,7 +224,7 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnValueLoadException);
 
         // Two inserts, two TTL expirations
-        verify(mockOnAfterChange, vMode.times(4)).run();
+        verify(mockOnAfterChange, vMode.times(4)).accept(eq(8888), eq(8877));
 
 
         // -- Assert: state
@@ -253,13 +251,15 @@ class ReadThruRefreshAheadCacheTest {
 
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
-        verify(mockOnAfterChange, vMode).run();
         verify(mockOnCacheHit, vMode).accept(eq(k));
         verify(mockValueLoader, vMode).apply(eq(k));
 
         verifyNoInteractions(mockOnBeforeRefresh);
         verifyNoInteractions(mockOnCacheMiss);
         verifyNoInteractions(mockOnValueLoadException);
+
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(2));
+        verify(mockOnAfterChange, vMode).accept(eq(2), eq(9));
 
         // -- Assert: state
         assertTrue(subject.containsKey(k));
@@ -297,15 +297,17 @@ class ReadThruRefreshAheadCacheTest {
         verify(mockOnCacheHit, vMode).accept(eq(k));
         verify(mockValueLoader, vMode).apply(eq(k));
 
-        if (removeEntryWhenValueLoaderReturnsNull) {
-            verify(mockOnAfterChange, vMode).run();
-        } else {
-            verifyNoInteractions(mockOnAfterChange);
-        }
-
         verifyNoInteractions(mockOnBeforeRefresh);
         verifyNoInteractions(mockOnCacheMiss);
         verifyNoInteractions(mockOnValueLoadException);
+
+        verify(mockOnAfterChange, vMode).accept(isNull(), eq(2)); // arrange section
+        if (removeEntryWhenValueLoaderReturnsNull) {
+            verify(mockOnAfterChange, vMode).accept(eq(2), isNull());
+
+        } else {
+            verifyNoMoreInteractions(mockOnAfterChange);
+        }
 
         // -- Assert: state
         if (removeEntryWhenValueLoaderReturnsNull) {
@@ -337,13 +339,15 @@ class ReadThruRefreshAheadCacheTest {
 
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
-        verify(mockOnAfterChange, vMode).run();
         verify(mockOnBeforeRefresh, vMode).accept(eq(k));
         verify(mockOnCacheHit, vMode).accept(eq(k));
         verify(mockValueLoader, vMode).apply(eq(k));
 
         verifyNoInteractions(mockOnCacheMiss);
         verifyNoInteractions(mockOnValueLoadException);
+
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(7));
+        verify(mockOnAfterChange, vMode).accept(eq(7), eq(8));
 
         // -- Assert: state
         assertEquals(1, subject.size());
@@ -388,7 +392,7 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnValueLoadException);
 
         if (removeEntryWhenValueLoaderReturnsNull) {
-            verify(mockOnAfterChange, vMode).run();
+            verify(mockOnAfterChange, vMode).accept(eq(222), eq(994));
         } else {
             verifyNoInteractions(mockOnAfterChange);
         }
@@ -419,7 +423,7 @@ class ReadThruRefreshAheadCacheTest {
 
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
-        verify(mockOnAfterChange, vMode).run();
+        verify(mockOnAfterChange, vMode).accept(eq(23652), eq(2243));
         verify(mockOnCacheMiss, vMode).accept(eq(k));
         verify(mockValueLoader, vMode).apply(eq(k));
 
@@ -482,7 +486,7 @@ class ReadThruRefreshAheadCacheTest {
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
 
-        verify(mockOnAfterChange, vMode).run();
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(3));
         verify(mockOnCacheMiss, vMode).accept(eq(k));
         verify(mockValueLoader, vMode).apply(eq(k));
 
