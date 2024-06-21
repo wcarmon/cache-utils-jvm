@@ -20,7 +20,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +28,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.verification.VerificationMode;
 
-//@Timeout(value = 20L, unit = SECONDS)  // TODO: restore after debugging
+// @Timeout(value = 20L, unit = SECONDS)  // TODO: restore after debugging
 class ReadThruRefreshAheadCacheTest {
 
     ScheduledExecutorService executorService;
@@ -100,8 +99,10 @@ class ReadThruRefreshAheadCacheTest {
         verify(mockOnValueLoadException, vMode).accept(eq(k), eq(ex));
         verify(mockValueLoader, vMode).apply(eq(k));
 
-        verifyNoInteractions(mockOnAfterChange);
         verifyNoInteractions(mockOnCacheMiss);
+
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(3));
+        verifyNoMoreInteractions(mockOnAfterChange);
 
         // -- Assert: state
         assertTrue(subject.containsKey(k));
@@ -164,7 +165,6 @@ class ReadThruRefreshAheadCacheTest {
         assertEquals(18, got2);
         assertTrue(subject.containsKey(k));
 
-
         // -- Assert: callbacks
         verify(mockOnCacheMiss, times(2)).accept(eq(k));
         verify(mockValueLoader, times(2)).apply(eq(k));
@@ -179,12 +179,11 @@ class ReadThruRefreshAheadCacheTest {
         verify(mockOnAfterChange, vMode).accept(eq(17), eq(null));
         verify(mockOnAfterChange, vMode).accept(eq(null), eq(18));
         verify(mockOnAfterChange, vMode).accept(eq(18), eq(null));
-
+        verifyNoMoreInteractions(mockOnAfterChange);
 
         // -- Assert: state
         assertFalse(subject.containsKey(k)); // expired
     }
-
 
     @Test
     @Timeout(value = 5, unit = SECONDS)
@@ -213,7 +212,6 @@ class ReadThruRefreshAheadCacheTest {
         assertEquals(12, got2); // 11 expires
         assertTrue(subject.containsKey(k));
 
-
         // -- Assert: callbacks
         final var vMode = timeout(ttl.plus(ttl).toMillis());
         verify(mockOnBeforeRefresh, vMode.times(1)).accept(eq(k));
@@ -223,9 +221,12 @@ class ReadThruRefreshAheadCacheTest {
 
         verifyNoInteractions(mockOnValueLoadException);
 
-        // Two inserts, two TTL expirations
-        verify(mockOnAfterChange, vMode.times(4)).accept(eq(8888), eq(8877));
-
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(10));
+        verify(mockOnAfterChange, vMode).accept(eq(10), eq(11));
+        verify(mockOnAfterChange, vMode).accept(eq(11), eq(null));
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(12));
+        verify(mockOnAfterChange, vMode).accept(eq(12), eq(null));
+        verifyNoMoreInteractions(mockOnAfterChange);
 
         // -- Assert: state
         Thread.sleep(ttl.plusMillis(10));
@@ -260,6 +261,7 @@ class ReadThruRefreshAheadCacheTest {
 
         verify(mockOnAfterChange, vMode).accept(eq(null), eq(2));
         verify(mockOnAfterChange, vMode).accept(eq(2), eq(9));
+        verifyNoMoreInteractions(mockOnAfterChange);
 
         // -- Assert: state
         assertTrue(subject.containsKey(k));
@@ -275,9 +277,11 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
 
         // -- reconfigure subject
-        subject = configureSubject()
-                .removeEntryWhenValueLoaderReturnsNull(removeEntryWhenValueLoaderReturnsNull)
-                .build();
+        subject =
+                configureSubject()
+                        .removeEntryWhenValueLoaderReturnsNull(
+                                removeEntryWhenValueLoaderReturnsNull)
+                        .build();
 
         final String k = "theKey";
 
@@ -304,10 +308,8 @@ class ReadThruRefreshAheadCacheTest {
         verify(mockOnAfterChange, vMode).accept(isNull(), eq(2)); // arrange section
         if (removeEntryWhenValueLoaderReturnsNull) {
             verify(mockOnAfterChange, vMode).accept(eq(2), isNull());
-
-        } else {
-            verifyNoMoreInteractions(mockOnAfterChange);
         }
+        verifyNoMoreInteractions(mockOnAfterChange);
 
         // -- Assert: state
         if (removeEntryWhenValueLoaderReturnsNull) {
@@ -348,6 +350,7 @@ class ReadThruRefreshAheadCacheTest {
 
         verify(mockOnAfterChange, vMode).accept(eq(null), eq(7));
         verify(mockOnAfterChange, vMode).accept(eq(7), eq(8));
+        verifyNoMoreInteractions(mockOnAfterChange);
 
         // -- Assert: state
         assertEquals(1, subject.size());
@@ -363,10 +366,11 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
 
         // -- reconfigure subject
-        subject = configureSubject()
-                .removeEntryWhenValueLoaderReturnsNull(removeEntryWhenValueLoaderReturnsNull)
-                .build();
-
+        subject =
+                configureSubject()
+                        .removeEntryWhenValueLoaderReturnsNull(
+                                removeEntryWhenValueLoaderReturnsNull)
+                        .build();
 
         final String k = "theKey";
 
@@ -391,11 +395,11 @@ class ReadThruRefreshAheadCacheTest {
         verifyNoInteractions(mockOnCacheMiss);
         verifyNoInteractions(mockOnValueLoadException);
 
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(4));
         if (removeEntryWhenValueLoaderReturnsNull) {
-            verify(mockOnAfterChange, vMode).accept(eq(222), eq(994));
-        } else {
-            verifyNoInteractions(mockOnAfterChange);
+            verify(mockOnAfterChange, vMode).accept(eq(4), eq(null));
         }
+        verifyNoMoreInteractions(mockOnAfterChange);
 
         // -- Assert: state
         if (removeEntryWhenValueLoaderReturnsNull) {
@@ -423,13 +427,15 @@ class ReadThruRefreshAheadCacheTest {
 
         // -- Assert: callbacks
         final VerificationMode vMode = timeout(1000L).times(1);
-        verify(mockOnAfterChange, vMode).accept(eq(23652), eq(2243));
         verify(mockOnCacheMiss, vMode).accept(eq(k));
         verify(mockValueLoader, vMode).apply(eq(k));
 
         verifyNoInteractions(mockOnBeforeRefresh);
         verifyNoInteractions(mockOnCacheHit);
         verifyNoInteractions(mockOnValueLoadException);
+
+        verify(mockOnAfterChange, vMode).accept(eq(null), eq(6));
+        verifyNoMoreInteractions(mockOnAfterChange);
 
         // -- Assert: state
         assertFalse(subject.isEmpty());
@@ -532,7 +538,8 @@ class ReadThruRefreshAheadCacheTest {
         assertTrue(subject.isEmpty());
     }
 
-    private ReadThruRefreshAheadCache.ReadThruRefreshAheadCacheBuilder<String, Integer> configureSubject() {
+    private ReadThruRefreshAheadCache.ReadThruRefreshAheadCacheBuilder<String, Integer>
+            configureSubject() {
         return ReadThruRefreshAheadCache.<String, Integer>builder()
                 .capacity(64)
                 .executorService(executorService)
@@ -569,10 +576,6 @@ class ReadThruRefreshAheadCacheTest {
             throw new RuntimeException(e);
         }
     }
-
-    // TODO: test TTL: entry removed after TTL
-
-    // TODO: test TTL: cleanup for removed entry doesn't throw
 
     // TODO: avoid duplicate refresh for key in brief period
 }

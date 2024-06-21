@@ -13,7 +13,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -25,8 +24,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ReadThruRefreshAheadCache<K, V> {
 
-    private static final Consumer<Object> NO_OP = ignored -> {
-    };
+    private static final Consumer<Object> NO_OP = ignored -> {};
 
     private final ConcurrentMap<K, CacheEntry<V>> cache;
 
@@ -55,8 +53,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
     private final boolean removeEntryWhenValueLoaderReturnsNull;
 
     /** Time to live for entries */
-    @Nullable
-    private final Duration ttl;
+    @Nullable private final Duration ttl;
 
     /** Given a key, retrieves a value from a slower data store */
     private final Function<? super K, ? extends V> valueLoader;
@@ -91,8 +88,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         this.ttl = ttl;
 
         if (onAfterChange == null) {
-            this.onAfterChange = (oldValue, newValue) -> {
-            };
+            this.onAfterChange = (oldValue, newValue) -> {};
         } else {
             this.onAfterChange = onAfterChange;
         }
@@ -251,8 +247,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         requireNonNull(key, "key is required and null.");
         requireNonNull(value, "value is required and null.");
 
-        final CacheEntry<V> old =
-                cache.put(key, new CacheEntry<>(value, scheduleExpiration(key)));
+        final CacheEntry<V> old = cache.put(key, new CacheEntry<>(value, scheduleExpiration(key)));
 
         if (old != null && old.expiration() != null) {
             old.expiration().cancel(false);
@@ -322,10 +317,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
             return null;
         }
 
-        return executorService.schedule(
-                () -> remove(key),
-                ttl.toMillis(),
-                TimeUnit.MILLISECONDS);
+        return executorService.schedule(() -> remove(key), ttl.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     public static class ReadThruRefreshAheadCacheBuilder<K, V> {
@@ -341,8 +333,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         private @Nullable Duration ttl;
         private Function<? super K, ? extends V> valueLoader;
 
-        ReadThruRefreshAheadCacheBuilder() {
-        }
+        ReadThruRefreshAheadCacheBuilder() {}
 
         public ReadThruRefreshAheadCache<K, V> build() {
             return new ReadThruRefreshAheadCache<>(
@@ -409,7 +400,8 @@ public final class ReadThruRefreshAheadCache<K, V> {
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> valueLoader(Function<? super K, ? extends V> valueLoader) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> valueLoader(
+                Function<? super K, ? extends V> valueLoader) {
             this.valueLoader = valueLoader;
             return this;
         }

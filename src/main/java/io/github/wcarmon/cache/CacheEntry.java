@@ -3,7 +3,6 @@ package io.github.wcarmon.cache;
 import static java.util.Objects.requireNonNull;
 
 import java.util.concurrent.ScheduledFuture;
-
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -13,9 +12,7 @@ import org.jetbrains.annotations.Nullable;
  * @param expiration optional result for cleanup based on TTL
  * @param <V>         value type
  */
-record CacheEntry<V>(
-        V value,
-        @Nullable ScheduledFuture<?> expiration) {
+record CacheEntry<V>(V value, @Nullable ScheduledFuture<?> expiration) {
 
     CacheEntry {
         requireNonNull(value, "value is required and null.");
