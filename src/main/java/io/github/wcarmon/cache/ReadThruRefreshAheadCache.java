@@ -8,9 +8,12 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -22,7 +25,8 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ReadThruRefreshAheadCache<K, V> {
 
-    private static final Consumer<Object> NO_OP = ignored -> {};
+    private static final Consumer<Object> NO_OP = ignored -> {
+    };
 
     private final ConcurrentMap<K, CacheEntry<V>> cache;
 
@@ -42,12 +46,14 @@ public final class ReadThruRefreshAheadCache<K, V> {
     private final Consumer<? super K> onCacheMiss;
 
     /** Executes after failing to load value from valueLoader */
-    private final @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException;
+    private final BiConsumer<? super K, ? super Exception> onValueLoadException;
 
+    /** If the valueLoader returns null, remove the associated entry */
     private final boolean removeEntryWhenValueLoaderReturnsNull;
 
     /** Time to live for entries */
-    @Nullable private final Duration ttl;
+    @Nullable
+    private final Duration ttl;
 
     /** Given a key, retrieves a value from a slower data store */
     private final Function<? super K, ? extends V> valueLoader;
@@ -58,7 +64,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
             @Nullable Duration ttl,
             Function<? super K, ? extends V> valueLoader,
             ScheduledExecutorService executorService,
-            @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException,
+            BiConsumer<? super K, ? super Exception> onValueLoadException,
             @Nullable Consumer<K> onBeforeRefresh,
             @Nullable Consumer<K> onCacheHit,
             @Nullable Consumer<K> onCacheMiss,
@@ -82,7 +88,8 @@ public final class ReadThruRefreshAheadCache<K, V> {
         this.ttl = ttl;
 
         if (onAfterChange == null) {
-            this.onAfterChange = () -> {};
+            this.onAfterChange = () -> {
+            };
         } else {
             this.onAfterChange = onAfterChange;
         }
@@ -166,7 +173,9 @@ public final class ReadThruRefreshAheadCache<K, V> {
 
         // -- Cache "good" values
         if (value != null) {
-            final CacheEntry<V> entry = CacheEntry.of(value);
+
+            @Nullable final ScheduledFuture<?> future = scheduleExpiration(key);
+            final CacheEntry<V> entry = new CacheEntry<>(value, future);
             final CacheEntry<V> old = cache.put(key, entry);
 
             if (old == null || !Objects.equals(value, old.value())) {
@@ -220,7 +229,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         requireNonNull(key, "key is required and null.");
         requireNonNull(value, "value is required and null.");
 
-        cache.put(key, CacheEntry.of(value));
+        putInternal(key, value);
     }
 
     /**
@@ -234,7 +243,16 @@ public final class ReadThruRefreshAheadCache<K, V> {
         requireNonBlankKey(key);
 
         final CacheEntry<V> old = cache.remove(key);
-        return old == null ? null : old.value();
+        if (old == null) {
+            return null;
+        }
+
+        if (old.expiration() != null) {
+            old.expiration().cancel(false);
+        }
+
+        onAfterChange.run();
+        return old.value();
     }
 
     /**
@@ -244,6 +262,20 @@ public final class ReadThruRefreshAheadCache<K, V> {
      */
     public int size() {
         return cache.size();
+    }
+
+    private void putInternal(K key, V value) {
+        requireNonNull(key, "key is required and null.");
+        requireNonNull(value, "value is required and null.");
+
+        final CacheEntry<V> old =
+                cache.put(key, new CacheEntry<>(value, scheduleExpiration(key)));
+
+        if (old != null && old.expiration() != null) {
+            old.expiration().cancel(false);
+        }
+
+        onAfterChange.run();
     }
 
     private void refreshLater(K key) {
@@ -267,9 +299,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
         }
 
         if (value != null) {
-            cache.put(key, CacheEntry.of(value));
-            onAfterChange.run();
+            @Nullable final ScheduledFuture<?> future = scheduleExpiration(key);
+            final CacheEntry<V> entry = new CacheEntry<>(value, future);
 
+            putInternal(key, value);
             return;
         }
 
@@ -283,6 +316,20 @@ public final class ReadThruRefreshAheadCache<K, V> {
         }
     }
 
+    @Nullable
+    private ScheduledFuture<?> scheduleExpiration(K key) {
+        requireNonBlankKey(key);
+
+        if (ttl == null) {
+            return null;
+        }
+
+        return executorService.schedule(
+                () -> remove(key),
+                ttl.toMillis(),
+                TimeUnit.MILLISECONDS);
+    }
+
     public static class ReadThruRefreshAheadCacheBuilder<K, V> {
 
         private int capacity;
@@ -291,12 +338,13 @@ public final class ReadThruRefreshAheadCache<K, V> {
         private @Nullable Consumer<K> onBeforeRefresh;
         private @Nullable Consumer<K> onCacheHit;
         private @Nullable Consumer<K> onCacheMiss;
-        private @Nullable BiConsumer<K, Exception> onValueLoadException;
+        private @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException;
         private boolean removeEntryWhenValueLoaderReturnsNull;
         private @Nullable Duration ttl;
-        private Function<K, V> valueLoader;
+        private Function<? super K, ? extends V> valueLoader;
 
-        ReadThruRefreshAheadCacheBuilder() {}
+        ReadThruRefreshAheadCacheBuilder() {
+        }
 
         public ReadThruRefreshAheadCache<K, V> build() {
             return new ReadThruRefreshAheadCache<>(
@@ -347,7 +395,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         }
 
         public ReadThruRefreshAheadCacheBuilder<K, V> onValueLoadException(
-                @Nullable BiConsumer<K, Exception> onValueLoadException) {
+                @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException) {
             this.onValueLoadException = onValueLoadException;
             return this;
         }
@@ -363,7 +411,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> valueLoader(Function<K, V> valueLoader) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> valueLoader(Function<? super K, ? extends V> valueLoader) {
             this.valueLoader = valueLoader;
             return this;
         }

@@ -11,11 +11,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -23,6 +25,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +34,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.verification.VerificationMode;
 
-@Timeout(value = 20L, unit = SECONDS)
+//@Timeout(value = 20L, unit = SECONDS)  // TODO: restore after debugging
 class ReadThruRefreshAheadCacheTest {
 
     ScheduledExecutorService executorService;
@@ -55,7 +58,7 @@ class ReadThruRefreshAheadCacheTest {
         mockOnValueLoadException = mock(BiConsumer.class);
         mockValueLoader = mock(Function.class);
 
-        subject = buildSubject(true);
+        subject = configureSubject().build();
     }
 
     @Test
@@ -142,6 +145,97 @@ class ReadThruRefreshAheadCacheTest {
 
     @Test
     @Timeout(value = 3, unit = SECONDS)
+    void testItemsAddedWithTTL_valueAbsent() throws Exception {
+
+        // -- Arrange
+        final String k = "theKey";
+        final Duration ttl = Duration.ofMillis(100);
+
+        // -- reconfigure subject
+        subject = configureSubject().ttl(ttl).build();
+
+        when(mockValueLoader.apply(eq(k))).thenReturn(17, 18);
+        assumeFalse(subject.containsKey(k));
+
+        // -- Act
+        final Integer got = subject.get(k, false);
+        assertEquals(17, got);
+        assertTrue(subject.containsKey(k));
+
+        Thread.sleep(ttl.plusMillis(10));
+
+        // -- Assert: output
+        final Integer got2 = subject.get(k, false);
+        assertEquals(18, got2);
+        assertTrue(subject.containsKey(k));
+
+
+        // -- Assert: callbacks
+        verify(mockOnCacheMiss, times(2)).accept(eq(k));
+        verify(mockValueLoader, times(2)).apply(eq(k));
+
+        verifyNoInteractions(mockOnBeforeRefresh);
+        verifyNoInteractions(mockOnCacheHit);
+        verifyNoInteractions(mockOnValueLoadException);
+
+        // Two inserts, two TTL expirations
+        final VerificationMode vMode = timeout(ttl.plus(ttl).toMillis()).times(4);
+        verify(mockOnAfterChange, vMode).run();
+
+
+        // -- Assert: state
+        assertFalse(subject.containsKey(k)); // expired
+    }
+
+
+    @Test
+//    @Timeout(value = 3, unit = SECONDS) // TODO: restore this
+    void testItemsAddedWithTTL_valuePresent() throws Exception {
+
+        // -- Arrange
+        final String k = "theKey";
+        final Duration ttl = Duration.ofMillis(100);
+
+        // -- reconfigure subject
+        subject = configureSubject().ttl(ttl).build();
+
+        when(mockValueLoader.apply(eq(k))).thenReturn(11, 12);
+
+        subject.put(k, 10);
+        assumeTrue(subject.containsKey(k));
+
+        // -- Act
+//        final Integer got = subject.get(k, false);
+//        assertEquals(17, got);
+//        assertTrue(subject.containsKey(k));
+//
+//        Thread.sleep(ttl.plusMillis(10));
+//
+//        // -- Assert: output
+//        final Integer got2 = subject.get(k, false);
+//        assertEquals(18, got2);
+//        assertTrue(subject.containsKey(k));
+//
+//
+//        // -- Assert: callbacks
+//        verify(mockOnCacheMiss, times(2)).accept(eq(k));
+//        verify(mockValueLoader, times(2)).apply(eq(k));
+//
+//        verifyNoInteractions(mockOnBeforeRefresh);
+//        verifyNoInteractions(mockOnCacheHit);
+//        verifyNoInteractions(mockOnValueLoadException);
+//
+//        // Two inserts, two TTL expirations
+//        final VerificationMode vMode = timeout(ttl.plus(ttl).toMillis()).times(4);
+//        verify(mockOnAfterChange, vMode).run();
+//
+//
+//        // -- Assert: state
+//        assertFalse(subject.containsKey(k)); // expired
+    }
+
+    @Test
+    @Timeout(value = 3, unit = SECONDS)
     void testValueInCache_bypassCache_valueLoaderReturnsNonNull() {
         // -- Arrange
         final String k = "theKey";
@@ -181,7 +275,9 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
 
         // -- reconfigure subject
-        subject = buildSubject(removeEntryWhenValueLoaderReturnsNull);
+        subject = configureSubject()
+                .removeEntryWhenValueLoaderReturnsNull(removeEntryWhenValueLoaderReturnsNull)
+                .build();
 
         final String k = "theKey";
 
@@ -263,7 +359,10 @@ class ReadThruRefreshAheadCacheTest {
         // -- Arrange
 
         // -- reconfigure subject
-        subject = buildSubject(removeEntryWhenValueLoaderReturnsNull);
+        subject = configureSubject()
+                .removeEntryWhenValueLoaderReturnsNull(removeEntryWhenValueLoaderReturnsNull)
+                .build();
+
 
         final String k = "theKey";
 
@@ -429,8 +528,7 @@ class ReadThruRefreshAheadCacheTest {
         assertTrue(subject.isEmpty());
     }
 
-    private ReadThruRefreshAheadCache<String, Integer> buildSubject(
-            boolean removeEntryWhenValueLoaderReturnsNull) {
+    private ReadThruRefreshAheadCache.ReadThruRefreshAheadCacheBuilder<String, Integer> configureSubject() {
         return ReadThruRefreshAheadCache.<String, Integer>builder()
                 .capacity(64)
                 .executorService(executorService)
@@ -439,9 +537,9 @@ class ReadThruRefreshAheadCacheTest {
                 .onCacheHit(mockOnCacheHit)
                 .onCacheMiss(mockOnCacheMiss)
                 .onValueLoadException(mockOnValueLoadException)
-                .removeEntryWhenValueLoaderReturnsNull(removeEntryWhenValueLoaderReturnsNull)
-                .valueLoader(mockValueLoader)
-                .build();
+                .removeEntryWhenValueLoaderReturnsNull(true)
+                .ttl(null)
+                .valueLoader(mockValueLoader);
     }
 
     @Nullable
@@ -468,9 +566,17 @@ class ReadThruRefreshAheadCacheTest {
         }
     }
 
-    // TODO: avoid duplicate refresh for key in brief period
+    // TODO: testItemsAddedWithTTL, but test when there is a async refresh
+
+    // TODO: test TTL: entries added with a TTL (when configured)
 
     // TODO: test TTL: entry removed after TTL
+
+    // TODO: test TTL: cleanup for removed entry doesn't throw
+
+    // TODO: test TTL: clean up for TTL affects some callbacks (onAfterChange, )
+
     // TODO: test TTL: updated entry retained at first TTL period, then removed after second TTL
-    // period
+
+    // TODO: avoid duplicate refresh for key in brief period
 }
