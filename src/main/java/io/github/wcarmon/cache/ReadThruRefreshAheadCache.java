@@ -11,7 +11,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -23,8 +22,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ReadThruRefreshAheadCache<K, V> {
 
-    private static final Consumer<Object> NO_OP = ignored -> {
-    };
+    private static final Consumer<Object> NO_OP = ignored -> {};
 
     private final ConcurrentMap<K, CacheEntry<V>> cache;
 
@@ -47,9 +45,10 @@ public final class ReadThruRefreshAheadCache<K, V> {
     private final @Nullable BiConsumer<? super K, ? super Exception> onValueLoadException;
 
     private final boolean removeEntryWhenValueLoaderReturnsNull;
+
     /** Time to live for entries */
-    @Nullable
-    private final Duration ttl;
+    @Nullable private final Duration ttl;
+
     /** Given a key, retrieves a value from a slower data store */
     private final Function<? super K, ? extends V> valueLoader;
 
@@ -83,8 +82,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         this.ttl = ttl;
 
         if (onAfterChange == null) {
-            this.onAfterChange = () -> {
-            };
+            this.onAfterChange = () -> {};
         } else {
             this.onAfterChange = onAfterChange;
         }
@@ -191,6 +189,8 @@ public final class ReadThruRefreshAheadCache<K, V> {
     }
 
     /**
+     * Attempt to retrieve the value for the given key.
+     *
      * @param key - unique id for entry
      * @return V or null if unavailable in both cache and datasource
      */
@@ -296,8 +296,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
         private @Nullable Duration ttl;
         private Function<K, V> valueLoader;
 
-        ReadThruRefreshAheadCacheBuilder() {
-        }
+        ReadThruRefreshAheadCacheBuilder() {}
 
         public ReadThruRefreshAheadCache<K, V> build() {
             return new ReadThruRefreshAheadCache<>(
@@ -359,8 +358,7 @@ public final class ReadThruRefreshAheadCache<K, V> {
             return this;
         }
 
-        public ReadThruRefreshAheadCacheBuilder<K, V> ttl(
-                @Nullable Duration ttl) {
+        public ReadThruRefreshAheadCacheBuilder<K, V> ttl(@Nullable Duration ttl) {
             this.ttl = ttl;
             return this;
         }

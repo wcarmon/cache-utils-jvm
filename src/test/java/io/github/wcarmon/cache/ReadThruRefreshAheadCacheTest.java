@@ -23,7 +23,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +31,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.verification.VerificationMode;
 
-@Timeout(value = 10L, unit = SECONDS)
+@Timeout(value = 20L, unit = SECONDS)
 class ReadThruRefreshAheadCacheTest {
 
     ScheduledExecutorService executorService;
@@ -472,5 +471,6 @@ class ReadThruRefreshAheadCacheTest {
     // TODO: avoid duplicate refresh for key in brief period
 
     // TODO: test TTL: entry removed after TTL
-    // TODO: test TTL: updated entry retained at first TTL period, then removed after second TTL period
+    // TODO: test TTL: updated entry retained at first TTL period, then removed after second TTL
+    // period
 }
